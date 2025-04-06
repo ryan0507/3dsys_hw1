@@ -189,20 +189,17 @@ def geodesic_distance(pred_rotmat, target_rotmat):
         torch.Tensor: Geodesic distance
     """
 
-    batch_size = pred_rotmat.shape[0]
-    angles = torch.zeros(batch_size, device=pred_rotmat.device)
-    
-    pred_np = pred_rotmat.detach().cpu().numpy()
-    target_np = target_rotmat.detach().cpu().numpy()
-    
-    for i in range(batch_size):
-        r_pred = Rotation.from_matrix(pred_np[i])
-        r_target = Rotation.from_matrix(target_np[i])
-        r_diff = r_pred * r_target.inv()
-        angle_np = r_diff.magnitude()
-        angles[i] = torch.tensor(angle_np, device=pred_rotmat.device)
-    
-    return angles
+    # Compute the relative rotation matrix: R_diff = R_pred^T * R_target
+    R_diff = torch.matmul(pred_rotmat.transpose(1, 2), target_rotmat)
+    # Compute the trace of each R_diff
+    trace = R_diff.diagonal(dim1=-2, dim2=-1).sum(-1)
+    # Calculate the cosine of the rotation angle
+    cos_angle = (trace - 1) / 2
+    # Clamp the cosine value to avoid numerical issues outside the valid arccos domain
+    cos_angle = torch.clamp(cos_angle, -1.0, 1.0)
+    # Compute the angle (geodesic distance)
+    angle = torch.acos(cos_angle)
+    return angle
 
 
 # ----------------------
@@ -269,7 +266,6 @@ def nined_to_rotmat(nined):
     
     return rotmat
 
-
 def quaternion_to_rotmat(quaternion):
     """
     Convert quaternions to rotation matrices.
@@ -280,19 +276,24 @@ def quaternion_to_rotmat(quaternion):
     Returns:
         torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
     """
-    
-    batch_size = quaternion.shape[0]
-    device = quaternion.device
-    
-    # scipy (x,y,z,w) -> (w,x,y,z)
-    quat_np = quaternion.detach().cpu().numpy()
-    quat_xyzw = np.concatenate([quat_np[:, 1:], quat_np[:, 0:1]], axis=1)
-    r = Rotation.from_quat(quat_xyzw)
-    rotmat_np = r.as_matrix()
 
-    # Move numpy to tensor values    
-    rotmat = torch.from_numpy(rotmat_np).to(device).float()
-    
+    quaternion = F.normalize(quaternion, p=2, dim=1)
+    w, x, y, z = quaternion[:, 0], quaternion[:, 1], quaternion[:, 2], quaternion[:, 3]
+    one = torch.ones_like(w)
+    two = 2.0
+    R11 = one - two * (y * y + z * z)
+    R12 = two * (x * y - w * z)
+    R13 = two * (x * z + w * y)
+    R21 = two * (x * y + w * z)
+    R22 = one - two * (x * x + z * z)
+    R23 = two * (y * z - w * x)
+    R31 = two * (x * z - w * y)
+    R32 = two * (y * z + w * x)
+    R33 = one - two * (x * x + y * y)
+    row1 = torch.stack([R11, R12, R13], dim=1)
+    row2 = torch.stack([R21, R22, R23], dim=1)
+    row3 = torch.stack([R31, R32, R33], dim=1)
+    rotmat = torch.stack([row1, row2, row3], dim=1)
     return rotmat
 
 
@@ -307,13 +308,37 @@ def euler_to_rotmat(euler):
         torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
     """
 
-    # Set device to the same
-    device = euler.device
-    euler_np = euler.detach().cpu().numpy()
-
-    # Convert to rotation matrix
-    rotmat_np = Rotation.from_euler('xyz', euler_np, degrees=False).as_matrix()
-    rotmat = torch.from_numpy(rotmat_np).to(device).float()
+    # Since here loss function is differentiable, we can directly apply the rotation matrices
+    # Apply scipy library is not admitted. Occring errors....
+    r = euler[:, 0]
+    p = euler[:, 1]
+    y = euler[:, 2]
+    cx = torch.cos(r)
+    sx = torch.sin(r)
+    cy = torch.cos(p)
+    sy = torch.sin(p)
+    cz = torch.cos(y)
+    sz = torch.sin(y)
+    # Rotation x-axis
+    R_x = torch.stack([
+        torch.stack([torch.ones_like(cx), torch.zeros_like(cx), torch.zeros_like(cx)], dim=1),
+        torch.stack([torch.zeros_like(cx), cx, -sx], dim=1),
+        torch.stack([torch.zeros_like(cx), sx, cx], dim=1)
+    ], dim=1)
+    # Rotation y-axis
+    R_y = torch.stack([
+        torch.stack([cy, torch.zeros_like(cy), sy], dim=1),
+        torch.stack([torch.zeros_like(cy), torch.ones_like(cy), torch.zeros_like(cy)], dim=1),
+        torch.stack([-sy, torch.zeros_like(cy), cy], dim=1)
+    ], dim=1)
+    # Rotation z-axis
+    R_z = torch.stack([
+        torch.stack([cz, -sz, torch.zeros_like(cz)], dim=1),
+        torch.stack([sz, cz, torch.zeros_like(cz)], dim=1),
+        torch.stack([torch.zeros_like(cz), torch.zeros_like(cz), torch.ones_like(cz)], dim=1)
+    ], dim=1)
+    # Compose rotations: using extrinsic rotations R = R_z * R_y * R_x
+    rotmat = torch.matmul(torch.matmul(R_z, R_y), R_x)
     return rotmat
 
 
@@ -329,11 +354,7 @@ def compute_metrics(pred, target, representation):
     Returns:
         dict: Dictionary of computed metrics
     """
-    # TODO: Convert representations to rotation matrices first
-    # TODO: Compute L1 and L2 metrics on the representations
-    # TODO: Compute chordal and geodesic metrics on the rotation matrices
-    # TODO: Return metrics as a dictionary
-
+    
     # Convert representations to rotation matrices
     if representation == 'euler':
         pred_rotmat = euler_to_rotmat(pred)
@@ -361,10 +382,10 @@ def compute_metrics(pred, target, representation):
     
     # Return metrics as a dictionary
     metrics = {
-        'l1_distance': l1_dist.mean().item(),
-        'l2_distance': l2_dist.mean().item(),
-        'chordal_distance': chord_dist.mean().item(),
-        'geodesic_distance': geod_dist.mean().item(),
+        'l1': l1_dist.mean(),
+        'l2': l2_dist.mean(),
+        'chordal': chord_dist.mean(),
+        'geodesic': geod_dist.mean(),
     }
     
     return metrics

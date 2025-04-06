@@ -583,6 +583,209 @@ def test_euler_comparisons():
     else:
          print("Euler-based reconstructions differ.")
 
+
+def new_quaternion_to_rotmat(quaternion):
+    """
+    Convert quaternions to rotation matrices.
+
+    Args:
+        quaternion (torch.Tensor): Batch of quaternions of shape (B, 4)
+
+    Returns:
+        torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
+    """
+
+    quaternion = F.normalize(quaternion, p=2, dim=1)
+    w, x, y, z = quaternion[:, 0], quaternion[:, 1], quaternion[:, 2], quaternion[:, 3]
+    one = torch.ones_like(w)
+    two = 2.0
+    R11 = one - two * (y * y + z * z)
+    R12 = two * (x * y - w * z)
+    R13 = two * (x * z + w * y)
+    R21 = two * (x * y + w * z)
+    R22 = one - two * (x * x + z * z)
+    R23 = two * (y * z - w * x)
+    R31 = two * (x * z - w * y)
+    R32 = two * (y * z + w * x)
+    R33 = one - two * (x * x + y * y)
+    row1 = torch.stack([R11, R12, R13], dim=1)
+    row2 = torch.stack([R21, R22, R23], dim=1)
+    row3 = torch.stack([R31, R32, R33], dim=1)
+    rotmat = torch.stack([row1, row2, row3], dim=1)
+    return rotmat
+
+
+def new_euler_to_rotmat(euler):
+    """
+    Convert Euler angles to rotation matrices.
+
+    Args:
+        euler (torch.Tensor): Batch of Euler angles of shape (B, 3)
+
+    Returns:
+        torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
+    """
+
+    # Since here loss function is differentiable, we can directly apply the rotation matrices
+    # Apply scipy library is not admitted. Occring errors....
+    r = euler[:, 0]
+    p = euler[:, 1]
+    y = euler[:, 2]
+    cx = torch.cos(r)
+    sx = torch.sin(r)
+    cy = torch.cos(p)
+    sy = torch.sin(p)
+    cz = torch.cos(y)
+    sz = torch.sin(y)
+    # Rotation x-axis
+    R_x = torch.stack([
+        torch.stack([torch.ones_like(cx), torch.zeros_like(cx), torch.zeros_like(cx)], dim=1),
+        torch.stack([torch.zeros_like(cx), cx, -sx], dim=1),
+        torch.stack([torch.zeros_like(cx), sx, cx], dim=1)
+    ], dim=1)
+    # Rotation y-axis
+    R_y = torch.stack([
+        torch.stack([cy, torch.zeros_like(cy), sy], dim=1),
+        torch.stack([torch.zeros_like(cy), torch.ones_like(cy), torch.zeros_like(cy)], dim=1),
+        torch.stack([-sy, torch.zeros_like(cy), cy], dim=1)
+    ], dim=1)
+    # Rotation z-axis
+    R_z = torch.stack([
+        torch.stack([cz, -sz, torch.zeros_like(cz)], dim=1),
+        torch.stack([sz, cz, torch.zeros_like(cz)], dim=1),
+        torch.stack([torch.zeros_like(cz), torch.zeros_like(cz), torch.ones_like(cz)], dim=1)
+    ], dim=1)
+    # Compose rotations: using extrinsic rotations R = R_z * R_y * R_x
+    rotmat = torch.matmul(torch.matmul(R_z, R_y), R_x)
+    return rotmat
+
+
+def test_quaternion_conversion_comparison():
+    """
+    Compare the original quaternion_to_rotmat with the new implementation.
+    """
+    print("\nTesting quaternion conversion comparison...")
+    
+    # Generate random quaternions
+    batch_size = 10
+    quaternions = torch.randn(batch_size, 4)
+    quaternions = F.normalize(quaternions, p=2, dim=1)  # Normalize to unit quaternions
+    
+    # Convert using both implementations
+    rotmat_original = quaternion_to_rotmat(quaternions)
+    rotmat_new = new_quaternion_to_rotmat(quaternions)
+    
+    # Calculate differences
+    diff = torch.abs(rotmat_original - rotmat_new)
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    
+    print(f"Max difference between implementations: {max_diff:.6f}")
+    print(f"Mean difference between implementations: {mean_diff:.6f}")
+    
+    # Check if they're close
+    is_close = torch.allclose(rotmat_original, rotmat_new, rtol=1e-5, atol=1e-5)
+    print(f"Implementations are {'close' if is_close else 'different'}")
+    
+    # Verify both produce valid rotation matrices
+    det_original = torch.det(rotmat_original)
+    det_new = torch.det(rotmat_new)
+    
+    print(f"Determinant of original implementation: {det_original.mean().item():.6f}")
+    print(f"Determinant of new implementation: {det_new.mean().item():.6f}")
+    
+    # Check orthogonality
+    identity = torch.eye(3, device=rotmat_original.device).unsqueeze(0).repeat(batch_size, 1, 1)
+    orthogonality_original = torch.matmul(rotmat_original, rotmat_original.transpose(1, 2))
+    orthogonality_new = torch.matmul(rotmat_new, rotmat_new.transpose(1, 2))
+    
+    orthogonality_diff_original = torch.abs(orthogonality_original - identity).mean().item()
+    orthogonality_diff_new = torch.abs(orthogonality_new - identity).mean().item()
+    
+    print(f"Orthogonality error (original): {orthogonality_diff_original:.6f}")
+    print(f"Orthogonality error (new): {orthogonality_diff_new:.6f}")
+    
+    return is_close
+
+def test_euler_conversion_comparison():
+    """
+    Compare the original euler_to_rotmat with the new implementation.
+    """
+    print("\nTesting Euler angle conversion comparison...")
+    
+    # Generate random Euler angles
+    batch_size = 10
+    euler_angles = torch.randn(batch_size, 3)
+    
+    # Convert using both implementations
+    rotmat_original = euler_to_rotmat(euler_angles)
+    rotmat_new = new_euler_to_rotmat(euler_angles)
+    
+    # Calculate differences
+    diff = torch.abs(rotmat_original - rotmat_new)
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    
+    print(f"Max difference between implementations: {max_diff:.6f}")
+    print(f"Mean difference between implementations: {mean_diff:.6f}")
+    
+    # Check if they're close
+    is_close = torch.allclose(rotmat_original, rotmat_new, rtol=1e-5, atol=1e-5)
+    print(f"Implementations are {'close' if is_close else 'different'}")
+    
+    # Verify both produce valid rotation matrices
+    det_original = torch.det(rotmat_original)
+    det_new = torch.det(rotmat_new)
+    
+    print(f"Determinant of original implementation: {det_original.mean().item():.6f}")
+    print(f"Determinant of new implementation: {det_new.mean().item():.6f}")
+    
+    # Check orthogonality
+    identity = torch.eye(3, device=rotmat_original.device).unsqueeze(0).repeat(batch_size, 1, 1)
+    orthogonality_original = torch.matmul(rotmat_original, rotmat_original.transpose(1, 2))
+    orthogonality_new = torch.matmul(rotmat_new, rotmat_new.transpose(1, 2))
+    
+    orthogonality_diff_original = torch.abs(orthogonality_original - identity).mean().item()
+    orthogonality_diff_new = torch.abs(orthogonality_new - identity).mean().item()
+    
+    print(f"Orthogonality error (original): {orthogonality_diff_original:.6f}")
+    print(f"Orthogonality error (new): {orthogonality_diff_new:.6f}")
+    
+    return is_close
+
+def test_quaternion_euler_consistency():
+    """
+    Test consistency between quaternion and Euler angle conversions.
+    """
+    print("\nTesting quaternion-Euler angle consistency...")
+    
+    # Generate random Euler angles
+    batch_size = 10
+    euler_angles = torch.randn(batch_size, 3)
+    
+    # Convert Euler to rotation matrix
+    rotmat_from_euler = new_euler_to_rotmat(euler_angles)
+    
+    # Convert rotation matrix to quaternion
+    quaternion = rotmat_to_quaternion(rotmat_from_euler)
+    
+    # Convert quaternion back to rotation matrix
+    rotmat_from_quaternion = new_quaternion_to_rotmat(quaternion)
+    
+    # Calculate differences
+    diff = torch.abs(rotmat_from_euler - rotmat_from_quaternion)
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    
+    print(f"Max difference between Euler and quaternion paths: {max_diff:.6f}")
+    print(f"Mean difference between Euler and quaternion paths: {mean_diff:.6f}")
+    
+    # Check if they're close
+    is_close = torch.allclose(rotmat_from_euler, rotmat_from_quaternion, rtol=1e-5, atol=1e-5)
+    print(f"Paths are {'consistent' if is_close else 'inconsistent'}")
+    
+    return is_close
+
 if __name__ == '__main__':
     test_euler_conversion()
     test_quaternion_conversion()
@@ -591,5 +794,10 @@ if __name__ == '__main__':
     test_compute_metrics()
     test_comparisons()
     test_euler_comparisons()
+    
+    # Add new tests
+    test_quaternion_conversion_comparison()
+    test_euler_conversion_comparison()
+    test_quaternion_euler_consistency()
     
     print("All tests passed successfully!")

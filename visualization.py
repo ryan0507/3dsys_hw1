@@ -34,10 +34,10 @@ def plot_training_results(train_losses, val_losses, val_metrics, representation,
     plt.figure(figsize=(12, 8))
     epochs = range(1, len(val_metrics) + 1)
     
-    metrics_to_plot = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
+    metrics_to_plot = ['l1', 'l2', 'chordal', 'geodesic']
     
     for i, metric_name in enumerate(metrics_to_plot):
-        values = [metrics[metric_name] for metrics in val_metrics]
+        values = [metrics[metric_name].item() for metrics in val_metrics]
         plt.subplot(2, 2, i+1)
         plt.plot(epochs, values)
         plt.title(f'{metric_name}')
@@ -53,7 +53,7 @@ def plot_box_metrics(results_dict, config):
     os.makedirs(config.plot_dir, exist_ok=True)
     
     rep_names = list(results_dict.keys())  # e.g. 4 representations
-    metric_names = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
+    metric_names = ['l1', 'l2', 'chordal', 'geodesic']
     n_reps = len(rep_names)
     group_gap = n_reps + 1  # gap between groups
     
@@ -65,7 +65,7 @@ def plot_box_metrics(results_dict, config):
     for m_index, m in enumerate(metric_names):
         for r_index, rep in enumerate(rep_names):
             # For each representation, extract the values of the metric from all epochs
-            values = [metrics[m] for metrics in results_dict[rep]['val_metrics']]
+            values = [metrics[m].item() for metrics in results_dict[rep]['val_metrics']]
             data_to_plot.append(values)
             # Calculate position for the box
             pos = m_index * group_gap + r_index

@@ -37,57 +37,63 @@ def main():
 
     # Train a model for each representation
     for representation, output_size in config.representations.items():
-        print(f"\n{'='*50}")
-        print(f"Training model for {representation} representation")
-        print(f"{'='*50}")
+        ## MODIFIED HERE that we need to train with 16 metrics
+        for metric in config.metrics:
+            print(f"\n{'='*50}")
+            print(f"Training model for {representation} representation with {metric} loss")
+            print(f"{'='*50}")
 
-        # Create datasets
-        train_dataset = PointCloudAlignmentDataset(
-            mode="train", device=config.device, representation=representation
-        )
-        test_dataset = PointCloudAlignmentDataset(
-            mode="test", device=config.device, representation=representation
-        )
+            # Create datasets
+            train_dataset = PointCloudAlignmentDataset(
+                mode="train", device=config.device, representation=representation
+            )
+            test_dataset = PointCloudAlignmentDataset(
+                mode="test", device=config.device, representation=representation
+            )
 
-        # Create dataloaders
-        train_loader = DataLoader(
-            train_dataset, batch_size=config.batch_size, shuffle=True
-        )
-        test_loader = DataLoader(
-            test_dataset, batch_size=config.batch_size, shuffle=False
-        )
+            # Create dataloaders
+            train_loader = DataLoader(
+                train_dataset, batch_size=config.batch_size, shuffle=True
+            )
+            test_loader = DataLoader(
+                test_dataset, batch_size=config.batch_size, shuffle=False
+            )
 
-        # Create model
-        model = RotationEstimationModel(config.input_dim, output_size)
+            # Create model
+            model = RotationEstimationModel(config.input_dim, output_size)
 
-        # Create trainer
-        trainer = Trainer(model, config, representation)
+            # Create trainer with specific representation and metric
+            trainer = Trainer(model, config, representation)
+            
+            ## MODIFIED HERE TO TRAIN WITH 16 METRICS
+            trainer.metrics = metric
 
-        # Train model
-        trainer.train(train_loader, test_loader)
+            # Train model
+            trainer.train(train_loader, test_loader)
 
-        # Store trainer for visualization
-        trainers[representation] = trainer
-        
-        # Store results for comparison plots
-        results_dict[representation] = {
-            'train_losses': trainer.train_losses,
-            'val_losses': trainer.val_losses,
-            'val_metrics': trainer.val_metrics
-        }
+            # Store trainer for visualization
+            key = f"{representation}_{metric}"
+            trainers[key] = trainer
+            
+            # Store results for comparison plots
+            results_dict[key] = {
+                'train_losses': trainer.train_losses,
+                'val_losses': trainer.val_losses,
+                'val_metrics': trainer.val_metrics
+            }
 
     # Plot results
     print("\nPlotting results...")
     
-    # Plot individual results for each representation
-    for representation in trainers.keys():
-        print(f"Plotting results for {representation} representation")
-        trainer = trainers[representation]
+    # Plot individual results for each representation and metric combination
+    for key in trainers.keys():
+        print(f"Plotting results for {key}")
+        trainer = trainers[key]
         plot_training_results(
             trainer.train_losses, 
             trainer.val_losses, 
             trainer.val_metrics, 
-            representation, 
+            key, 
             config
         )
     

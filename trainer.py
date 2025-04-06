@@ -28,9 +28,9 @@ class Trainer:
 
         # TODO: Initialize necessary variables
         self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate)
-        self.criterion = nn.MSELoss()
+        self.metrics = None
         
-        # 학습 히스토리 저장을 위한 변수들
+        # Training history variables
         self.train_losses = []
         self.val_losses = []
         self.val_metrics = []
@@ -52,12 +52,16 @@ class Trainer:
             # Forward pass
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
-            loss = self.criterion(outputs, targets)
+            
+            # Compute loss based on metric
+            metrics = compute_metrics(outputs, targets, self.representation)
+            loss = metrics[self.metrics]
             
             # Backward updates 
             loss.backward()
             self.optimizer.step()
             epoch_loss += loss.item()
+            
         avg_loss = epoch_loss / len(train_loader)
         return avg_loss
 
@@ -77,7 +81,10 @@ class Trainer:
                 
                 # Forward pass
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
+                
+                # Compute loss based on metric
+                metrics = compute_metrics(outputs, targets, self.representation)
+                loss = metrics[self.metrics]
                 
                 # Update variables
                 val_loss += loss.item()
@@ -95,8 +102,7 @@ class Trainer:
 
     def train(self, train_loader, val_loader):
         """Train the model for multiple epochs."""
-        # TODO: Implement training loop
-        print(f"Training model for {self.representation} representation")
+        print(f"Training model for {self.representation} representation with {self.metrics} loss")
         
         for epoch in range(self.config.epochs):
             train_loss = self.train_epoch(train_loader)
@@ -110,10 +116,9 @@ class Trainer:
             
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
-                self.best_model_state = self.model.state_dict().copy()
             
             print(f"Epoch {epoch+1}/{self.config.epochs}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
-            print(f"  Metrics: L1={metrics['l1_distance']:.4f}, L2={metrics['l2_distance']:.4f}, " + 
-                  f"Chordal={metrics['chordal_distance']:.4f}, Geodesic={metrics['geodesic_distance']:.4f}")
+            print(f"  Metrics: L1={metrics['l1'].item():.4f}, L2={metrics['l2'].item():.4f}, " + 
+                  f"Chordal={metrics['chordal'].item():.4f}, Geodesic={metrics['geodesic'].item():.4f}")
             
         print(f"Training completed. Best validation loss: {self.best_val_loss:.6f}")
