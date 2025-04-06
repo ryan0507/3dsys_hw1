@@ -45,24 +45,19 @@ class Trainer:
         epoch_loss = 0.0
         
         for inputs, targets in train_loader:
-            # 입력과 타겟을 디바이스로 이동
+            # Input and targets to 'device'
             inputs = inputs.to(self.device)
             targets = targets.to(self.device)
             
             # Forward pass
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
-            
-            # Loss 계산
             loss = self.criterion(outputs, targets)
             
-            # Backward pass
+            # Backward updates 
             loss.backward()
             self.optimizer.step()
-            
             epoch_loss += loss.item()
-            
-        # 평균 loss 계산 후 반환
         avg_loss = epoch_loss / len(train_loader)
         return avg_loss
 
@@ -76,29 +71,24 @@ class Trainer:
         
         with torch.no_grad():
             for inputs, targets in val_loader:
-                # 입력과 타겟을 디바이스로 이동
+                # Input and targets to 'device'
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
                 
                 # Forward pass
                 outputs = self.model(inputs)
-                
-                # Loss 계산
                 loss = self.criterion(outputs, targets)
-                val_loss += loss.item()
                 
-                # 예측값과 타겟 저장
+                # Update variables
+                val_loss += loss.item()
                 all_preds.append(outputs)
                 all_targets.append(targets)
         
-        # 평균 loss 계산
         avg_loss = val_loss / len(val_loader)
-        
-        # 모든 예측값과 타겟 합치기
         all_preds = torch.cat(all_preds, dim=0)
         all_targets = torch.cat(all_targets, dim=0)
         
-        # 메트릭 계산
+        # Compute metrics
         metrics = compute_metrics(all_preds, all_targets, self.representation)
         
         return avg_loss, metrics

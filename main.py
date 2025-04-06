@@ -11,7 +11,7 @@ from config import Config
 from dataset import PointCloudAlignmentDataset
 from model import RotationEstimationModel
 from trainer import Trainer
-from visualization import *
+from visualization import plot_training_results, plot_comparison, plot_final_comparison
 
 
 def main():
@@ -31,6 +31,9 @@ def main():
 
     # Dictionary to store trainers for each representation
     trainers = {}
+    
+    # Dictionary to store results for comparison plots
+    results_dict = {}
 
     # Train a model for each representation
     for representation, output_size in config.representations.items():
@@ -65,16 +68,38 @@ def main():
 
         # Store trainer for visualization
         trainers[representation] = trainer
+        
+        # Store results for comparison plots
+        results_dict[representation] = {
+            'train_losses': trainer.train_losses,
+            'val_losses': trainer.val_losses,
+            'val_metrics': trainer.val_metrics
+        }
 
     # Plot results
     print("\nPlotting results...")
-    # TODO: Plot and save the results
-    # Need to plot the results for each representation 4x4 pairs 
-    # Plot the results for each representation
+    
+    # Plot individual results for each representation
     for representation in trainers.keys():
         print(f"Plotting results for {representation} representation")
         trainer = trainers[representation]
-        trainer.plot_results()
+        plot_training_results(
+            trainer.train_losses, 
+            trainer.val_losses, 
+            trainer.val_metrics, 
+            representation, 
+            config
+        )
+    
+    # Plot comparison of all representations
+    print("Plotting comparison of all representations...")
+    plot_comparison(results_dict, config)
+    
+    # Plot final comparison of all metrics
+    print("Plotting final comparison of all metrics...")
+    plot_final_comparison(results_dict, config)
+    
+    print("All plots have been saved to:", config.plot_dir)
 
 
 if __name__ == "__main__":
