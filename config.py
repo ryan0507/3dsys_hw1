@@ -12,7 +12,7 @@ class Config:
         self.batch_size = 32
 
         # Training configuration
-        self.epochs = 2
+        self.epochs = 100
         self.learning_rate = 0.001
 
         # Model configuration

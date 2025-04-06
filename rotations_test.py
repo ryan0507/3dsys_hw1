@@ -107,24 +107,7 @@ def rotmat_to_nined(rotmat):
         torch.Tensor: Batch of 9D representations of shape (B, 9)
     """
     # TODO: Implement conversion from rotation matrices to 9D representation
-    # 회전 행렬을 평탄화
-    batch_size = rotmat.shape[0]
-    
-     # Step 1: SVD
-    U, S, Vt = torch.linalg.svd(rotmat)  # U, S, V^T each have shape (B, 3, 3)
-
-    # Step 2: Enforce a proper rotation by fixing the determinant to +1
-    det_uvt = torch.det(U @ Vt)          # Shape (B,)
-    diag_correction = torch.eye(3, device=rotmat.device).unsqueeze(0).repeat(rotmat.shape[0], 1, 1)
-    diag_correction[:, 2, 2] = det_uvt   # diag(1, 1, det(UV^T)) for each matrix in the batch
-
-    # Construct the orthonormal rotation
-    R = U @ diag_correction @ Vt         # Shape (B, 3, 3)
-
-    # Step 3: Flatten to 9D
-    nined_mat = R.reshape(rotmat.shape[0], 9)
-    
-    return nined_mat
+    return rotmat.reshape(rotmat.shape[0], 9)
 
 
 # ----------------------

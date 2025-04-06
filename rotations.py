@@ -110,19 +110,7 @@ def rotmat_to_nined(rotmat):
         torch.Tensor: Batch of 9D representations of shape (B, 9)
     """
     
-    U, S, Vt = torch.linalg.svd(rotmat)  # U, S, V^T each have shape (B, 3, 3)
-
-    # # Shape (B,)
-    det_uvt = torch.det(U @ Vt)          
-    # Shape (B, 3, 3)
-    diag_correction = torch.eye(3, device=rotmat.device).unsqueeze(0).repeat(rotmat.shape[0], 1, 1)
-    # diag(1, 1, det(UV^T)) for each matrix in the batch
-    # Need to make determinant 1
-    diag_correction[:, 2, 2] = det_uvt 
-    R = U @ diag_correction @ Vt         # Shape (B, 3, 3)
-    nined_mat = R.reshape(rotmat.shape[0], 9)
-    
-    return nined_mat
+    return rotmat.reshape(rotmat.shape[0], 9)
 
 
 # ----------------------
@@ -175,6 +163,7 @@ def chordal_distance(pred_rotmat, target_rotmat):
     chordal_dist = fro_norm / torch.sqrt(torch.tensor(2.0, device=pred_rotmat.device))
     
     return chordal_dist
+    # return torch.sqrt(torch.sum((pred_rotmat - target_rotmat) ** 2, dim=-1))
 
 
 def geodesic_distance(pred_rotmat, target_rotmat):
@@ -254,12 +243,12 @@ def nined_to_rotmat(nined):
     batch_size = nined.shape[0]    
     # Convert 9D representation to 3 3 matrix
     mat = nined.view(batch_size, 3, 3)
-    u, s, v = torch.svd(mat)
+    u, s, v = torch.linalg.svd(mat)
     # Restore rotation matrix: R = U * V^T
-    rotmat = torch.bmm(u, v.transpose(1, 2))
-    # Make determinant 1
-    det = torch.det(rotmat).view(batch_size, 1, 1)
-    rotmat = rotmat * torch.sign(det).view(batch_size, 1, 1)
+    vt = v.transpose(1, 2)
+    det = torch.det(u @ vt).view(batch_size, 1, 1)
+    VT = torch.cat((vt[:, :2, :], vt[:, -1:, :] * det), dim = 1)
+    rotmat = u @ VT
     
     return rotmat
 
