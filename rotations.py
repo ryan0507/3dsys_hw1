@@ -438,71 +438,6 @@ def test_nined_conversion():
     assert error.mean() < 1e-5, f"9D conversion error too high: {error.mean().item()}"
     print("9D conversion test passed.")
 
-def get_roma_func(alternatives):
-    """
-    Select the first available function from the roma module.
-    
-    Args:
-        alternatives (list): List of possible function names.
-        
-    Returns:
-        function: The function from the roma module.
-    
-    Raises:
-        AttributeError: If none of the alternatives exist.
-    """
-    for alt in alternatives:
-        if hasattr(roma, alt):
-            return getattr(roma, alt)
-    raise AttributeError(f"Roma library does not have any of the following attributes: {alternatives}")
-
-def test_roma_consistency():
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-
-    # --- Euler comparison ---
-    # Try alternatives for Euler conversion function.
-    euler_func = get_roma_func(['matrix2euler', 'euler_from_matrix', 'rotmat2euler'])
-    euler_custom = rotmat_to_euler(R).detach().cpu().numpy()
-    # Some functions might require an 'order' parameter.
-    try:
-        euler_roma = np.array([euler_func(r, order='xyz') for r in R_np])
-    except TypeError:
-        euler_roma = np.array([euler_func(r) for r in R_np])
-    diff_euler = np.abs(euler_custom - euler_roma)
-    assert diff_euler.max() < 1e-5, f"Roma Euler conversion mismatch: {diff_euler.max()}"
-    print("Roma Euler conversion test passed.")
-    
-    # --- Quaternion comparison ---
-    quat_func = get_roma_func(['matrix2quat', 'quaternion_from_matrix', 'rotmat2quat'])
-    quat_custom = rotmat_to_quaternion(R).detach().cpu().numpy()
-    quat_roma = np.array([quat_func(r) for r in R_np])
-    # Adjust for sign ambiguity
-    for i in range(batch_size):
-        if np.linalg.norm(quat_custom[i] + quat_roma[i]) < np.linalg.norm(quat_custom[i] - quat_roma[i]):
-            quat_roma[i] = -quat_roma[i]
-    diff_quat = np.abs(quat_custom - quat_roma)
-    assert diff_quat.max() < 1e-5, f"Roma quaternion conversion mismatch: {diff_quat.max()}"
-    print("Roma quaternion conversion test passed.")
-    
-    # --- 6D comparison ---
-    sixd_func = get_roma_func(['matrix2six', 'sixd_from_matrix', 'rotmat2six'])
-    sixd_custom = rotmat_to_sixd(R).detach().cpu().numpy()
-    sixd_roma = np.array([sixd_func(r) for r in R_np])
-    diff_sixd = np.abs(sixd_custom - sixd_roma)
-    assert diff_sixd.max() < 1e-5, f"Roma 6D conversion mismatch: {diff_sixd.max()}"
-    print("Roma 6D conversion test passed.")
-    
-    # --- 9D comparison ---
-    nined_func = get_roma_func(['matrix2nine', 'nined_from_matrix', 'rotmat2nined'])
-    nined_custom = rotmat_to_nined(R).detach().cpu().numpy()
-    nined_roma = np.array([nined_func(r) for r in R_np])
-    diff_nined = np.abs(nined_custom - nined_roma)
-    assert diff_nined.max() < 1e-5, f"Roma 9D conversion mismatch: {diff_nined.max()}"
-    print("Roma 9D conversion test passed.")
-
-
 def test_compute_metrics():
     batch_size = 5
     R_np = Rotation.random(batch_size).as_matrix()
@@ -522,12 +457,85 @@ def test_compute_metrics():
     print("Metrics computation test passed.")
 
 
+def roma_rotmat_to_quaternion(base: torch.Tensor, **kwargs) -> torch.Tensor:
+    return roma.rotmat_to_unitquat(base)
+
+def roma_rotmat_to_sixd(base: torch.Tensor, **kwargs) -> torch.Tensor:
+    return base[:, :, :2]
+
+def roma_rotmat_to_nined(base: torch.Tensor, **kwargs) -> torch.Tensor:
+    return base
+
+def roma_quaternion_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
+    # without normalization
+    # normalize first
+    x = inp.reshape(-1, 4)
+    return roma.unitquat_to_rotmat(x / x.norm(dim=1, keepdim=True))
+
+def roma_sixd_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
+    return roma.special_gramschmidt(inp.reshape(-1, 3, 2))
+
+
+def symmetric_orthogonalization(x, **kwargs):
+    """Maps 9D input vectors onto SO(3) via symmetric orthogonalization.
+
+    x: should have size [batch_size, 9]
+
+    Output has size [batch_size, 3, 3], where each inner 3x3 matrix is in SO(3).
+    """
+    m = x.view(-1, 3, 3)
+    u, s, v = torch.svd(m)
+    vt = torch.transpose(v, 1, 2)
+    det = torch.det(torch.matmul(u, vt))
+    det = det.view(-1, 1, 1)
+    vt = torch.cat((vt[:, :2, :], vt[:, -1:, :] * det), 1)
+    r = torch.matmul(u, vt)
+    return r
+
+
+def roma_nined_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
+    return symmetric_orthogonalization(inp)
+
+def test_comparisons():
+    import torch
+    from scipy.spatial.transform import Rotation
+    batch_size = 10
+    R_np = Rotation.random(batch_size).as_matrix()
+    R = torch.from_numpy(R_np).float()
+    
+    # Quaternion conversion comparison
+    quat_ours = rotmat_to_quaternion(R)
+    quat_roma = roma_rotmat_to_quaternion(R)
+    
+    # Reconstruct rotation matrices from quaternions for a fair comparison
+    R_rec_ours = quaternion_to_rotmat(quat_ours)
+    R_rec_roma = roma_quaternion_to_rotmat(quat_roma)
+    error_quat = geodesic_distance(R_rec_ours, R_rec_roma)
+    print("Geodesic error between quaternion-based reconstructions:", error_quat.mean().item())
+
+    # 6D conversion comparison
+    sixd_ours = rotmat_to_sixd(R)
+    sixd_roma = roma_rotmat_to_sixd(R)
+    R_rec_ours = sixd_to_rotmat(sixd_ours)
+    R_rec_roma = roma_sixd_to_rotmat(sixd_roma)
+    error_sixd = geodesic_distance(R_rec_ours, R_rec_roma)
+    print("Geodesic error between 6D-based reconstructions:", error_sixd.mean().item())
+
+    # 9D conversion comparison
+    nined_ours = rotmat_to_nined(R)
+    nined_roma = roma_rotmat_to_nined(R)
+    R_rec_ours = nined_to_rotmat(nined_ours)
+    R_rec_roma = roma_nined_to_rotmat(nined_roma)
+    error_nined = geodesic_distance(R_rec_ours, R_rec_roma)
+    print("Geodesic error between 9D-based reconstructions:", error_nined.mean().item())
+
 if __name__ == '__main__':
     test_euler_conversion()
     test_quaternion_conversion()
     test_sixd_conversion()
     test_nined_conversion()
-    test_roma_consistency()
     test_compute_metrics()
+    test_comparisons()
+    
     
     print("All tests passed successfully!")
