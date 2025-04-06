@@ -41,18 +41,21 @@ def rotmat_to_quaternion(rotmat):
     """
 
     batch_size = rotmat.shape[0]
-    U, _, Vt = torch.linalg.svd(rotmat)               # U, S, V^T each (B, 3, 3)
-    det_uvt = torch.det(U @ Vt)                       # (B,)
+    # U, S, V^T each (B, 3, 3)
+    U, _, Vt = torch.linalg.svd(rotmat)           
+    # Shape (B,)
+    det_uvt = torch.det(U @ Vt)                       
+    # Shape (B, 3, 3)
     diag_correction = torch.eye(3, device=rotmat.device).unsqueeze(0).repeat(batch_size, 1, 1)
     diag_correction[:, 2, 2] = det_uvt
-    R = U @ diag_correction @ Vt                      # (B, 3, 3)
+    R = U @ diag_correction @ Vt                      
     R_np = R.detach().cpu().numpy()
 
     # Use scipy's Rotation to get quaternion (x, y, z, w)
     r = Rotation.from_matrix(R_np)
-    quat_np_xyzw = r.as_quat()                        # shape (B, 4)
+    quat_np_xyzw = r.as_quat()                        
 
-    # Step 4: Reorder to (w, x, y, z)
+    # Reorder to (w, x, y, z)
     quat_np_wxyz = np.concatenate([
         quat_np_xyzw[:, 3:4],
         quat_np_xyzw[:, 0:1],
@@ -106,22 +109,17 @@ def rotmat_to_nined(rotmat):
     Returns:
         torch.Tensor: Batch of 9D representations of shape (B, 9)
     """
-    # TODO: Implement conversion from rotation matrices to 9D representation
-    # 회전 행렬을 평탄화
-    batch_size = rotmat.shape[0]
     
-     # Step 1: SVD
     U, S, Vt = torch.linalg.svd(rotmat)  # U, S, V^T each have shape (B, 3, 3)
 
-    # Step 2: Enforce a proper rotation by fixing the determinant to +1
-    det_uvt = torch.det(U @ Vt)          # Shape (B,)
+    # # Shape (B,)
+    det_uvt = torch.det(U @ Vt)          
+    # Shape (B, 3, 3)
     diag_correction = torch.eye(3, device=rotmat.device).unsqueeze(0).repeat(rotmat.shape[0], 1, 1)
-    diag_correction[:, 2, 2] = det_uvt   # diag(1, 1, det(UV^T)) for each matrix in the batch
-
-    # Construct the orthonormal rotation
+    # diag(1, 1, det(UV^T)) for each matrix in the batch
+    # Need to make determinant 1
+    diag_correction[:, 2, 2] = det_uvt 
     R = U @ diag_correction @ Vt         # Shape (B, 3, 3)
-
-    # Step 3: Flatten to 9D
     nined_mat = R.reshape(rotmat.shape[0], 9)
     
     return nined_mat
@@ -143,8 +141,6 @@ def l1_distance(pred, target):
     Returns:
         torch.Tensor: L1 distance
     """
-    # TODO: Implement L1 distance calculation
-    # L1 거리 계산 (절대값 차이의 합)
     return torch.abs(pred - target).mean(dim=-1)
 
 
@@ -159,8 +155,6 @@ def l2_distance(pred, target):
     Returns:
         torch.Tensor: L2 distance
     """
-    # TODO: Implement L2 distance calculation
-    # L2 거리 계산 (유클리드 거리)
     return torch.sqrt(torch.sum((pred - target) ** 2, dim=-1))
 
 
@@ -176,7 +170,6 @@ def chordal_distance(pred_rotmat, target_rotmat):
         torch.Tensor: Chordal distance
     """
     # TODO: Implement chordal distance calculation
-    # 예측 회전 행렬과 목표 회전 행렬의 차이
     diff = pred_rotmat - target_rotmat
     fro_norm = torch.sqrt(torch.sum(diff**2, dim=(1, 2)))
     chordal_dist = fro_norm / torch.sqrt(torch.tensor(2.0, device=pred_rotmat.device))
@@ -287,7 +280,7 @@ def quaternion_to_rotmat(quaternion):
     Returns:
         torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
     """
-    # TODO: Implement conversion from quaternions to rotation matrices
+    
     batch_size = quaternion.shape[0]
     device = quaternion.device
     
@@ -313,7 +306,6 @@ def euler_to_rotmat(euler):
     Returns:
         torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
     """
-    # TODO: Implement conversion from Euler angles to rotation matrices
 
     # Set device to the same
     device = euler.device
@@ -364,7 +356,6 @@ def compute_metrics(pred, target, representation):
     # Compute L1 and L2 metrics on the representations
     l1_dist = l1_distance(pred, target)
     l2_dist = l2_distance(pred, target)
-    
     chord_dist = chordal_distance(pred_rotmat, target_rotmat)
     geod_dist = geodesic_distance(pred_rotmat, target_rotmat)
     
@@ -377,218 +368,3 @@ def compute_metrics(pred, target, representation):
     }
     
     return metrics
-
-
-# Test code comparing with roma
-
-def test_euler_conversion():
-    batch_size = 10
-    # Generate a batch of random rotation matrices
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Convert rotation matrices -> Euler angles -> rotation matrices
-    euler = rotmat_to_euler(R)
-    R_rec = euler_to_rotmat(euler)
-    
-    # Compute geodesic error between original and recovered rotations
-    error = geodesic_distance(R, R_rec)
-    assert error.mean() < 1e-5, f"Euler conversion error too high: {error.mean().item()}"
-    print("Euler conversion test passed.")
-
-
-def test_quaternion_conversion():
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Convert rotation matrices -> quaternion -> rotation matrices
-    quat = rotmat_to_quaternion(R)
-    R_rec = quaternion_to_rotmat(quat)
-    
-    error = geodesic_distance(R, R_rec)
-    assert error.mean() < 1e-5, f"Quaternion conversion error too high: {error.mean().item()}"
-    print("Quaternion conversion test passed.")
-
-
-def test_sixd_conversion():
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Convert rotation matrices -> 6D representation -> rotation matrices
-    sixd = rotmat_to_sixd(R)
-    R_rec = sixd_to_rotmat(sixd)
-    
-    error = geodesic_distance(R, R_rec)
-    assert error.mean() < 1e-5, f"6D conversion error too high: {error.mean().item()}"
-    print("6D conversion test passed.")
-
-
-def test_nined_conversion():
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Convert rotation matrices -> 9D representation -> rotation matrices
-    nined = rotmat_to_nined(R)
-    R_rec = nined_to_rotmat(nined)
-    
-    error = geodesic_distance(R, R_rec)
-    assert error.mean() < 1e-5, f"9D conversion error too high: {error.mean().item()}"
-    print("9D conversion test passed.")
-
-def test_compute_metrics():
-    batch_size = 5
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Create a slightly perturbed target by adding small noise and re-orthonormalizing
-    noise = 0.01 * torch.randn_like(R)
-    R_noisy = R + noise
-    U, _, Vt = torch.linalg.svd(R_noisy)
-    R_target = torch.bmm(U, Vt.transpose(1, 2))
-    
-    # Test using the rotation matrix representation directly
-    metrics = compute_metrics(R, R_target, 'rotmat')
-    print("Computed metrics (rotmat representation):", metrics)
-    
-    # (You could similarly test for 'euler', 'quaternion', 'sixd', or 'nined')
-    print("Metrics computation test passed.")
-
-
-from hitchhike import euler_angles_to_matrix, matrix_to_euler_angles
-def roma_euler_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
-    return euler_angles_to_matrix(inp.reshape(-1, 3), convention="XYZ")
-
-def roma_rotmat_to_euler(base: torch.Tensor, **kwargs) -> torch.Tensor:
-    return matrix_to_euler_angles(base, convention="XYZ")
-
-def roma_rotmat_to_quaternion(base: torch.Tensor, **kwargs) -> torch.Tensor:
-    return roma.rotmat_to_unitquat(base)
-
-def roma_rotmat_to_sixd(base: torch.Tensor, **kwargs) -> torch.Tensor:
-    return base[:, :, :2]
-
-def roma_rotmat_to_nined(base: torch.Tensor, **kwargs) -> torch.Tensor:
-    return base
-
-def roma_quaternion_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
-    # without normalization
-    # normalize first
-    x = inp.reshape(-1, 4)
-    return roma.unitquat_to_rotmat(x / x.norm(dim=1, keepdim=True))
-
-def roma_sixd_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
-    return roma.special_gramschmidt(inp.reshape(-1, 3, 2))
-
-
-def symmetric_orthogonalization(x, **kwargs):
-    """Maps 9D input vectors onto SO(3) via symmetric orthogonalization.
-
-    x: should have size [batch_size, 9]
-
-    Output has size [batch_size, 3, 3], where each inner 3x3 matrix is in SO(3).
-    """
-    m = x.view(-1, 3, 3)
-    u, s, v = torch.svd(m)
-    vt = torch.transpose(v, 1, 2)
-    det = torch.det(torch.matmul(u, vt))
-    det = det.view(-1, 1, 1)
-    vt = torch.cat((vt[:, :2, :], vt[:, -1:, :] * det), 1)
-    r = torch.matmul(u, vt)
-    return r
-
-
-def roma_nined_to_rotmat(inp: torch.Tensor, **kwargs) -> torch.Tensor:
-    return symmetric_orthogonalization(inp)
-
-def test_comparisons():
-    import torch
-    import numpy as np
-    from scipy.spatial.transform import Rotation
-
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # --- Quaternion Conversion Comparison ---
-    quat_ours = rotmat_to_quaternion(R)
-    quat_roma = roma_rotmat_to_quaternion(R)
-    
-    # Reconstruct rotation matrices from quaternions
-    R_rec_ours = quaternion_to_rotmat(quat_ours)
-    R_rec_roma = roma_quaternion_to_rotmat(quat_roma)
-    
-    # Convert to numpy arrays for comparison
-    R_rec_ours_np = R_rec_ours.detach().cpu().numpy()
-    R_rec_roma_np = R_rec_roma.detach().cpu().numpy()
-    if np.allclose(R_rec_ours_np, R_rec_roma_np, atol=1e-5):
-        print("Quaternion-based reconstructions are close (np.allclose).")
-    else:
-        print("Quaternion-based reconstructions differ.")
-
-    # --- 6D Conversion Comparison ---
-    sixd_ours = rotmat_to_sixd(R)
-    sixd_roma = roma_rotmat_to_sixd(R)
-    
-    # Reconstruct rotation matrices from 6D representations
-    R_rec_ours = sixd_to_rotmat(sixd_ours)
-    R_rec_roma = roma_sixd_to_rotmat(sixd_roma)
-    
-    R_rec_ours_np = R_rec_ours.detach().cpu().numpy()
-    R_rec_roma_np = R_rec_roma.detach().cpu().numpy()
-    if np.allclose(R_rec_ours_np, R_rec_roma_np, atol=1e-5):
-        print("6D-based reconstructions are close (np.allclose).")
-    else:
-        print("6D-based reconstructions differ.")
-
-    # --- 9D Conversion Comparison ---
-    nined_ours = rotmat_to_nined(R)
-    nined_roma = roma_rotmat_to_nined(R)
-    
-    # Reconstruct rotation matrices from 9D representations
-    R_rec_ours = nined_to_rotmat(nined_ours)
-    R_rec_roma = roma_nined_to_rotmat(nined_roma)
-    
-    R_rec_ours_np = R_rec_ours.detach().cpu().numpy()
-    R_rec_roma_np = R_rec_roma.detach().cpu().numpy()
-    if np.allclose(R_rec_ours_np, R_rec_roma_np, atol=1e-5):
-        print("9D-based reconstructions are close (np.allclose).")
-    else:
-        print("9D-based reconstructions differ.")
-
-def test_euler_comparisons():
-    import numpy as np
-    from scipy.spatial.transform import Rotation
-
-    batch_size = 10
-    R_np = Rotation.random(batch_size).as_matrix()
-    R = torch.from_numpy(R_np).float()
-    
-    # Euler conversion using your implementation
-    euler_ours = rotmat_to_euler(R)
-    R_rec_ours = euler_to_rotmat(euler_ours)
-    
-    # Euler conversion using roma (with xyz convention)
-    euler_roma = roma_rotmat_to_euler(R)
-    R_rec_roma = roma_euler_to_rotmat(euler_roma)
-    
-    R_rec_ours_np = R_rec_ours.detach().cpu().numpy()
-    R_rec_roma_np = R_rec_roma.detach().cpu().numpy()
-    
-    if np.allclose(R_rec_ours_np, R_rec_roma_np, atol=1e-5):
-         print("Euler-based reconstructions are close (np.allclose).")
-    else:
-         print("Euler-based reconstructions differ.")
-
-if __name__ == '__main__':
-    test_euler_conversion()
-    test_quaternion_conversion()
-    test_sixd_conversion()
-    test_nined_conversion()
-    test_compute_metrics()
-    test_comparisons()
-    test_euler_comparisons()
-    
-    print("All tests passed successfully!")

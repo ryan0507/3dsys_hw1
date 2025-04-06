@@ -99,66 +99,21 @@ class Trainer:
         print(f"Training model for {self.representation} representation")
         
         for epoch in range(self.config.epochs):
-            # 한 에폭 학습
             train_loss = self.train_epoch(train_loader)
             
-            # 검증 데이터로 평가
             val_loss, metrics = self.evaluate(val_loader)
             
-            # 학습 히스토리 저장
             self.train_losses.append(train_loss)
             self.val_losses.append(val_loss)
+            # Save all of the metrics for each epoch box plots
             self.val_metrics.append(metrics)
             
-            # 최고 모델 저장
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.best_model_state = self.model.state_dict().copy()
             
-            # 진행 상황 출력
             print(f"Epoch {epoch+1}/{self.config.epochs}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
             print(f"  Metrics: L1={metrics['l1_distance']:.4f}, L2={metrics['l2_distance']:.4f}, " + 
                   f"Chordal={metrics['chordal_distance']:.4f}, Geodesic={metrics['geodesic_distance']:.4f}")
-        
-        # 학습 완료 후 최고 모델 로드
-        if self.best_model_state is not None:
-            self.model.load_state_dict(self.best_model_state)
             
         print(f"Training completed. Best validation loss: {self.best_val_loss:.6f}")
-    
-    def plot_results(self):
-        """Plot training results."""
-        if not self.config.save_plots:
-            return
-            
-        # 결과 저장 디렉토리 생성
-        os.makedirs(self.config.plot_dir, exist_ok=True)
-        
-        # 학습 및 검증 손실 그래프
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.train_losses, label='Train Loss')
-        plt.plot(self.val_losses, label='Validation Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title(f'{self.representation} - Training and Validation Loss')
-        plt.legend()
-        plt.savefig(os.path.join(self.config.plot_dir, f'{self.representation}_loss.png'))
-        plt.close()
-        
-        # 메트릭 그래프
-        plt.figure(figsize=(12, 8))
-        epochs = range(1, len(self.val_metrics) + 1)
-        
-        metrics_to_plot = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
-        
-        for i, metric_name in enumerate(metrics_to_plot):
-            values = [metrics[metric_name] for metrics in self.val_metrics]
-            plt.subplot(2, 2, i+1)
-            plt.plot(epochs, values)
-            plt.title(f'{metric_name}')
-            plt.xlabel('Epoch')
-            plt.ylabel('Value')
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.config.plot_dir, f'{self.representation}_metrics.png'))
-        plt.close()

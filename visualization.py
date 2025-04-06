@@ -48,85 +48,49 @@ def plot_training_results(train_losses, val_losses, val_metrics, representation,
     plt.savefig(os.path.join(config.plot_dir, f'{representation}_metrics.png'))
     plt.close()
 
-def plot_comparison(results_dict, config):
-    """
-    Plot comparison of all rotation representations for each metric.
-    
-    Args:
-        results_dict (dict): Dictionary with keys as representation names and values as
-                            dictionaries containing train_losses, val_losses, and val_metrics
-        config: Configuration object with plot_dir attribute
-    """
-    if not config.save_plots:
-        return
-        
+def plot_box_metrics(results_dict, config):
     # Create results directory if it doesn't exist
     os.makedirs(config.plot_dir, exist_ok=True)
     
-    # Plot comparison of losses
+    rep_names = list(results_dict.keys())  # e.g. 4 representations
+    metric_names = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
+    n_reps = len(rep_names)
+    group_gap = n_reps + 1  # gap between groups
+    
+    data_to_plot = []  # list to store data for each box
+    positions = []     # x-axis positions for each box
+    group_centers = [] # for labeling groups
+    
+    # Iterate over each error metric
+    for m_index, m in enumerate(metric_names):
+        for r_index, rep in enumerate(rep_names):
+            # For each representation, extract the values of the metric from all epochs
+            values = [metrics[m] for metrics in results_dict[rep]['val_metrics']]
+            data_to_plot.append(values)
+            # Calculate position for the box
+            pos = m_index * group_gap + r_index
+            positions.append(pos)
+        # Calculate the center of the current group for the x-axis tick label
+        center = m_index * group_gap + (n_reps - 1) / 2.0
+        group_centers.append(center)
+    
     plt.figure(figsize=(12, 8))
-    for rep, results in results_dict.items():
-        plt.plot(results['train_losses'], label=f'{rep} Train')
-        plt.plot(results['val_losses'], label=f'{rep} Val')
+    bp = plt.boxplot(data_to_plot, positions=positions, widths=0.6, patch_artist=True)
     
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Comparison of Training and Validation Losses')
-    plt.legend()
-    plt.savefig(os.path.join(config.plot_dir, 'comparison_loss.png'))
-    plt.close()
+    # Set colors for boxes (assign one color per representation)
+    colors = ['lightblue', 'lightgreen', 'lightpink', 'lightyellow']
+    for i, box in enumerate(bp['boxes']):
+        box.set_facecolor(colors[i % n_reps])
     
-    # Plot comparison of metrics
-    metrics_to_plot = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
+    plt.xlabel('Error Metric')
+    plt.ylabel('Error')
+    plt.title('Box Plot of Error Metrics for Each Representation')
+    plt.xticks(group_centers, metric_names)
     
-    for metric in metrics_to_plot:
-        plt.figure(figsize=(12, 8))
-        for rep, results in results_dict.items():
-            values = [metrics[metric] for metrics in results['val_metrics']]
-            plt.plot(values, label=rep)
-        
-        plt.xlabel('Epoch')
-        plt.ylabel('Value')
-        plt.title(f'Comparison of {metric}')
-        plt.legend()
-        plt.savefig(os.path.join(config.plot_dir, f'comparison_{metric}.png'))
-        plt.close()
-
-def plot_final_comparison(results_dict, config):
-    """
-    Plot final comparison of all metrics for all representations.
+    # Create legend manually to indicate which color corresponds to which representation
+    import matplotlib.patches as mpatches
+    legend_patches = [mpatches.Patch(color=colors[i], label=rep_names[i]) for i in range(n_reps)]
+    plt.legend(handles=legend_patches, title='Representation', loc='upper right')
     
-    Args:
-        results_dict (dict): Dictionary with keys as representation names and values as
-                            dictionaries containing train_losses, val_losses, and val_metrics
-        config: Configuration object with plot_dir attribute
-    """
-    if not config.save_plots:
-        return
-        
-    # Create results directory if it doesn't exist
-    os.makedirs(config.plot_dir, exist_ok=True)
-    
-    # Get the final metrics for each representation
-    final_metrics = {}
-    for rep, results in results_dict.items():
-        final_metrics[rep] = results['val_metrics'][-1]  # Get the last epoch's metrics
-    
-    # Plot final comparison for each metric
-    metrics_to_plot = ['l1_distance', 'l2_distance', 'chordal_distance', 'geodesic_distance']
-    
-    plt.figure(figsize=(15, 10))
-    for i, metric in enumerate(metrics_to_plot):
-        plt.subplot(2, 2, i+1)
-        
-        reps = list(final_metrics.keys())
-        values = [final_metrics[rep][metric] for rep in reps]
-        
-        plt.bar(reps, values)
-        plt.title(f'Final {metric}')
-        plt.ylabel('Value')
-        plt.xticks(rotation=45)
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(config.plot_dir, 'final_comparison.png'))
+    plt.savefig(os.path.join(config.plot_dir, 'box_plot_metrics.png'))
     plt.close()

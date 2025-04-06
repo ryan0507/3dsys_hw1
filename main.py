@@ -11,7 +11,7 @@ from config import Config
 from dataset import PointCloudAlignmentDataset
 from model import RotationEstimationModel
 from trainer import Trainer
-from visualization import plot_training_results, plot_comparison, plot_final_comparison
+from visualization import plot_training_results, plot_box_metrics
 
 
 def main():
@@ -91,15 +91,9 @@ def main():
             config
         )
     
-    # Plot comparison of all representations
-    print("Plotting comparison of all representations...")
-    plot_comparison(results_dict, config)
-    
-    # Plot final comparison of all metrics
-    print("Plotting final comparison of all metrics...")
-    plot_final_comparison(results_dict, config)
-    
-    print("All plots have been saved to:", config.plot_dir)
+    # Plot box plot comparison for error metrics (16 boxes: 4 metrics × 4 representations)
+    print("Plotting box plot comparison for error metrics...")
+    plot_box_metrics(results_dict, config)
 
 
 if __name__ == "__main__":
