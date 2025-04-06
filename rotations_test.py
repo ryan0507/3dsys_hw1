@@ -362,6 +362,7 @@ def compute_metrics(pred, target, representation):
         raise ValueError(f"Unknown representation: {representation}")
     
     # Compute L1 and L2 metrics on the representations
+    # Ahh? 16 pairs... need to modify before submission
     l1_dist = l1_distance(pred, target)
     l2_dist = l2_distance(pred, target)
     
