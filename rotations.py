@@ -225,12 +225,9 @@ def sixd_to_rotmat(sixd):
     y_raw = sixd[:, 3:6]  
 
     x = F.normalize(x_raw, p=2, dim=1)
-    
     # Gram-Schmidt process
     z = torch.cross(x, y_raw, dim=1)
     z = F.normalize(z, p=2, dim=1)
-
-    # Cross product of z and x
     y = torch.cross(z, x, dim=1)
     
     # Combine each column to form a rotation matrix
@@ -381,6 +378,7 @@ def compute_metrics(pred, target, representation):
     geod_dist = geodesic_distance(pred_rotmat, target_rotmat)
     
     # Return metrics as a dictionary
+    # We could use with same as loss function
     metrics = {
         'l1': l1_dist.mean(),
         'l2': l2_dist.mean(),

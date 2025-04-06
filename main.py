@@ -36,9 +36,9 @@ def main():
     results_dict = {}
 
     # Train a model for each representation
-    for representation, output_size in config.representations.items():
+    for metric in config.metrics:
         ## MODIFIED HERE that we need to train with 16 metrics
-        for metric in config.metrics:
+        for representation, output_size in config.representations.items():
             print(f"\n{'='*50}")
             print(f"Training model for {representation} representation with {metric} loss")
             print(f"{'='*50}")
