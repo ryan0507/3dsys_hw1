@@ -51,17 +51,17 @@ def plot_box_metrics(results_dict, config):
         values = [m[loss_metric].item() for m in result['val_metrics']]
         groups[loss_metric][rep] = values
 
-    # Order groups by config.metrics and representations alphabetically (or any fixed order)
+    # Order groups by config.metrics and representations
     groups_order = config.metrics  
     rep_order = sorted(list(rep_set))
     n_reps = len(rep_order)
-    group_gap = n_reps + 1  # gap between groups
+    group_gap = n_reps + 1  
     
     data_to_plot = []
     positions = []
     group_centers = []
     
-    # Build data_to_plot and positions for boxplot() call.
+    # Build data_to_plot and positions for boxplot() 
     for i, loss_metric in enumerate(groups_order):
         group_data = groups.get(loss_metric, {})
         for j, rep in enumerate(rep_order):
@@ -85,7 +85,7 @@ def plot_box_metrics(results_dict, config):
     
     plt.xlabel('Training Loss Function Metrics')
     plt.ylabel('Error Value')
-    plt.title('Box Plot of Validation Error for Each Experiment')
+    plt.title('Validation Error for Each Experiment')
     plt.xticks(group_centers, groups_order)
     
     # Create a legend mapping each color to its representation.

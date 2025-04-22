@@ -9,13 +9,11 @@ import torch.optim as optim
 mnist = fetch_openml('mnist_784')
 
 # print(mnist)
-
 y_data = mnist.target.to_numpy().astype(int)
 X_data = mnist.data.to_numpy()
 
-
 # Sample selection: select at least 100 sample per digit
-sample_size = 100
+sample_size = 200
 class_indices_per_digit = []
 for digit in range(10):
     digit_indices = np.where(y_data == digit)[0][:sample_size]
@@ -53,7 +51,7 @@ dist_torch = torch.tensor(D, dtype=torch.float32)
 X_torch = torch.randn(n_samples, 2, requires_grad=True)  # Random init for 2D embedding
 optimizer = optim.Adam([X_torch], lr=0.01)
 # Iteration settings for training gradient descent methods
-num_iterations = 200  
+num_iterations = 2000  
 
 
 for iter in range(num_iterations):

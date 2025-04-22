@@ -52,8 +52,6 @@ class Trainer:
             # Forward pass
             self.optimizer.zero_grad()
             outputs = self.model(inputs)
-            
-            # Compute loss based on metric
             metrics = compute_metrics(outputs, targets, self.representation)
             loss = metrics[self.metrics]
             

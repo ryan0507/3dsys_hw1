@@ -159,9 +159,8 @@ def chordal_distance(pred_rotmat, target_rotmat):
     """
     # TODO: Implement chordal distance calculation
     diff = pred_rotmat - target_rotmat
-    fro_norm = torch.sqrt(torch.sum(diff**2, dim=(1, 2)))
-    chordal_dist = fro_norm / torch.sqrt(torch.tensor(2.0, device=pred_rotmat.device))
-    
+    chordal_dist = torch.sum(diff**2, dim=(1, 2))
+        
     return chordal_dist
     # return torch.sqrt(torch.sum((pred_rotmat - target_rotmat) ** 2, dim=-1))
 
@@ -180,13 +179,9 @@ def geodesic_distance(pred_rotmat, target_rotmat):
 
     # Compute the relative rotation matrix: R_diff = R_pred^T * R_target
     R_diff = torch.matmul(pred_rotmat.transpose(1, 2), target_rotmat)
-    # Compute the trace of each R_diff
     trace = R_diff.diagonal(dim1=-2, dim2=-1).sum(-1)
-    # Calculate the cosine of the rotation angle
     cos_angle = (trace - 1) / 2
-    # Clamp the cosine value to avoid numerical issues outside the valid arccos domain
     cos_angle = torch.clamp(cos_angle, -1.0, 1.0)
-    # Compute the angle (geodesic distance)
     angle = torch.acos(cos_angle)
     return angle
 
@@ -263,22 +258,23 @@ def quaternion_to_rotmat(quaternion):
         torch.Tensor: Batch of rotation matrices of shape (B, 3, 3)
     """
 
+    # Really horrible code... but it works with graident flowing
     quaternion = F.normalize(quaternion, p=2, dim=1)
     w, x, y, z = quaternion[:, 0], quaternion[:, 1], quaternion[:, 2], quaternion[:, 3]
-    one = torch.ones_like(w)
-    two = 2.0
-    R11 = one - two * (y * y + z * z)
-    R12 = two * (x * y - w * z)
-    R13 = two * (x * z + w * y)
-    R21 = two * (x * y + w * z)
-    R22 = one - two * (x * x + z * z)
-    R23 = two * (y * z - w * x)
-    R31 = two * (x * z - w * y)
-    R32 = two * (y * z + w * x)
-    R33 = one - two * (x * x + y * y)
-    row1 = torch.stack([R11, R12, R13], dim=1)
-    row2 = torch.stack([R21, R22, R23], dim=1)
-    row3 = torch.stack([R31, R32, R33], dim=1)
+    one_matrix = torch.ones_like(w)
+
+    R1_1 = one_matrix - 2 * (y*y + z* z)
+    R1_2 = 2 * (x*y -w*z)
+    R1_3 = 2 * (x*z + w*y)
+    R2_1 = 2 * (x*y + w*z)
+    R2_2 = one_matrix-2 * (x*x+z*z)
+    R2_3 = 2 * (y*z-w*x)
+    R3_1 = 2 * (x*z-w*y)
+    R3_2 = 2 * (y*z+w*x)
+    R3_3 = one_matrix - 2 * (x * x + y * y)
+    row1 = torch.stack([R1_1, R1_2, R1_3], dim=1)
+    row2 = torch.stack([R2_1, R2_2, R2_3], dim=1)
+    row3 = torch.stack([R3_1, R3_2, R3_3], dim=1)
     rotmat = torch.stack([row1, row2, row3], dim=1)
     return rotmat
 
@@ -305,19 +301,19 @@ def euler_to_rotmat(euler):
     sy = torch.sin(p)
     cz = torch.cos(y)
     sz = torch.sin(y)
-    # Rotation x-axis
+    # Rot_x 
     R_x = torch.stack([
         torch.stack([torch.ones_like(cx), torch.zeros_like(cx), torch.zeros_like(cx)], dim=1),
         torch.stack([torch.zeros_like(cx), cx, -sx], dim=1),
         torch.stack([torch.zeros_like(cx), sx, cx], dim=1)
     ], dim=1)
-    # Rotation y-axis
+    # Rot_y
     R_y = torch.stack([
         torch.stack([cy, torch.zeros_like(cy), sy], dim=1),
         torch.stack([torch.zeros_like(cy), torch.ones_like(cy), torch.zeros_like(cy)], dim=1),
         torch.stack([-sy, torch.zeros_like(cy), cy], dim=1)
     ], dim=1)
-    # Rotation z-axis
+    # Rot_z
     R_z = torch.stack([
         torch.stack([cz, -sz, torch.zeros_like(cz)], dim=1),
         torch.stack([sz, cz, torch.zeros_like(cz)], dim=1),
