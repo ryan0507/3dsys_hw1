@@ -51,7 +51,7 @@ dist_torch = torch.tensor(D, dtype=torch.float32)
 X_torch = torch.randn(n_samples, 2, requires_grad=True)  # Random init for 2D embedding
 optimizer = optim.Adam([X_torch], lr=0.01)
 # Iteration settings for training gradient descent methods
-num_iterations = 2000  
+num_iterations = 20000  
 
 
 for iter in range(num_iterations):

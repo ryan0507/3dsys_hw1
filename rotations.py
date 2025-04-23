@@ -181,7 +181,7 @@ def geodesic_distance(pred_rotmat, target_rotmat):
     R_diff = torch.matmul(pred_rotmat.transpose(1, 2), target_rotmat)
     trace = R_diff.diagonal(dim1=-2, dim2=-1).sum(-1)
     cos_angle = (trace - 1) / 2
-    cos_angle = torch.clamp(cos_angle, -1.0, 1.0)
+    cos_angle = torch.clamp(cos_angle, -0.98, 0.98)
     angle = torch.acos(cos_angle)
     return angle
 
